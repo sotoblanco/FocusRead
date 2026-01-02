@@ -100,21 +100,68 @@ const App: React.FC = () => {
   }, [currentIndex, stats, elapsedTime, view, activeSessionId, chunks]);
 
   const processText = (text: string, title?: string) => {
-    // Improved Text Processing Logic
-    const rawParagraphs = text.split(/\n\s*\n/);
-    
-    const processedChunks = rawParagraphs
-      .map(p => {
-        return p
-          .replace(/\s+/g, ' ') 
-          .replace(/([a-z])-\s+([a-z])/gi, '$1$2') 
-          .trim();
-      })
-      .filter(p => p.length > 50);
+    // 1. Normalize line endings
+    const normalizedText = text.replace(/\r\n/g, '\n');
 
-    let finalChunks: string[] = processedChunks;
+    // 2. Initial Split Strategy
+    // Default: Split by double newline (standard paragraphs)
+    let rawSegments = normalizedText.split(/\n\s*\n/);
+
+    // Heuristic: If we have very few segments for a long text, it might be single-newline separated (common in some PDFs)
+    if (rawSegments.length < 3 && normalizedText.length > 600) {
+       // Split by newline ONLY if it looks like the end of a sentence (punctuation) 
+       // to avoid breaking mid-sentence lines in standard PDFs.
+       rawSegments = normalizedText.split(/(?<=[.!?])\s*\n/);
+    }
+
+    // 3. Process and Refine Segments for Focus Mode
+    let refinedChunks: string[] = [];
+    
+    rawSegments.forEach(segment => {
+      // Unwrap hard-wrapped lines within the paragraph
+      let cleanSegment = segment
+        .replace(/\s+/g, ' ') // Replace multiple spaces/newlines with single space
+        .replace(/([a-z])-\s+([a-z])/gi, '$1$2') // Fix hyphenation
+        .trim();
+
+      if (cleanSegment.length === 0) return;
+
+      // STRICT FOCUS: If a paragraph is massive (> 1000 chars), split it into smaller logical sub-blocks.
+      // This ensures the "single paragraph" view is never a daunting wall of text.
+      if (cleanSegment.length > 1000) {
+        // Regex looks for sentence endings.
+        const sentences = cleanSegment.match(/[^.!?]+[.!?]+["']?|.+$/g) || [cleanSegment];
+        let currentChunk = '';
+        
+        sentences.forEach(sentence => {
+          if ((currentChunk + sentence).length > 600) {
+            refinedChunks.push(currentChunk.trim());
+            currentChunk = sentence;
+          } else {
+            currentChunk += ' ' + sentence;
+          }
+        });
+        if (currentChunk) refinedChunks.push(currentChunk.trim());
+      } else {
+        refinedChunks.push(cleanSegment);
+      }
+    });
+
+    // 4. Merge orphans (very short chunks)
+    const finalChunks: string[] = [];
+    refinedChunks.forEach((chunk, i) => {
+       // If chunk is tiny (< 60 chars) and not the first one, append to previous
+       // This handles weird PDF artifacts or headers/footers appearing as lines
+       if (chunk.length < 60 && finalChunks.length > 0) {
+         finalChunks[finalChunks.length - 1] += ' ' + chunk;
+       } else {
+         finalChunks.push(chunk);
+       }
+    });
+
+    // Fallback if processing failed
     if (finalChunks.length === 0 && text.trim().length > 0) {
-       finalChunks = [text.replace(/\s+/g, ' ').trim()];
+       finalChunks.push(text.trim());
     }
 
     const chunkObjects = finalChunks.map((text, id) => ({ text, id }));
@@ -684,7 +731,7 @@ const App: React.FC = () => {
                     onClick={() => setShowQuiz(true)}
                     className="group bg-indigo-600 text-white px-10 py-4 rounded-full font-bold shadow-xl shadow-indigo-100 hover:bg-indigo-700 hover:scale-105 transition-all"
                   >
-                    I have understood this section
+                    See next paragraph
                   </button>
                 ) : (
                   <QuizCard quiz={currentQuiz!} onAnswer={handleAnswer} isLoading={isQuizLoading} />
