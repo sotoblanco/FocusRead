@@ -1,0 +1,5 @@
+{
+  "name": "FocusRead Quizzer",
+  "description": "A minimalist reading companion that breaks down long texts into paragraphs. To advance, you must pass an AI-generated multiple-choice quiz for each section, tracking your focus and progress.",
+  "requestFramePermissions": []
+}
