@@ -54,3 +54,16 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
 }
+
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+}
+
+export interface LeaderboardEntry {
+  username: string;
+  total_books_completed: number;
+  total_words_read: number;
+  total_correct_answers: number;
+}

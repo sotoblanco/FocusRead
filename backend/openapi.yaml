@@ -1,0 +1,350 @@
+openapi: 3.0.0
+info:
+  title: FocusRead API
+  description: API for the FocusRead application, providing AI-powered reading assistance and library management.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+paths:
+  # -------------------------------------------------------------------------
+  # AI Services
+  # -------------------------------------------------------------------------
+  /ai/quiz:
+    post:
+      summary: Generate a quiz for a text chunk
+      operationId: generateQuiz
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - chunk
+              properties:
+                chunk:
+                  type: string
+                  description: The text chunk to generate a quiz for.
+      responses:
+        '200':
+          description: A generated multiple-choice question.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizQuestion'
+        '500':
+          description: AI generation failed.
+
+  /ai/format:
+    post:
+      summary: Format a text chunk to Markdown
+      operationId: formatChunk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - chunk
+              properties:
+                chunk:
+                  type: string
+                  description: The raw text chunk to format.
+      responses:
+        '200':
+          description: The formatted Markdown text.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  formattedText:
+                    type: string
+
+  /ai/chat:
+    post:
+      summary: Chat with the AI about the current text
+      operationId: chatWithAI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - currentText
+                - history
+                - message
+              properties:
+                currentText:
+                  type: string
+                  description: The current text section being read (context).
+                history:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ChatMessage'
+                  description: Previous chat history.
+                message:
+                  type: string
+                  description: The user's new message.
+      responses:
+        '200':
+          description: The AI's response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+
+  # -------------------------------------------------------------------------
+  # Library / Stories
+  # -------------------------------------------------------------------------
+  /stories:
+    get:
+      summary: Get all stories in the library
+      operationId: getStories
+      responses:
+        '200':
+          description: A list of library items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LibraryItem'
+    
+    post:
+      summary: Create a new story
+      operationId: createStory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LibraryItem'
+      responses:
+        '201':
+          description: The created story.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryItem'
+
+  /stories/{id}:
+    get:
+      summary: Get a specific story by ID
+      operationId: getStory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The requested story.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryItem'
+        '404':
+          description: Story not found.
+
+    put:
+      summary: Update a story (progress, stats, etc.)
+      operationId: updateStory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LibraryItem'
+      responses:
+        '200':
+          description: The updated story.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryItem'
+
+    delete:
+      summary: Delete a story
+      operationId: deleteStory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Story deleted successfully.
+
+  # -------------------------------------------------------------------------
+  # Settings
+  # -------------------------------------------------------------------------
+  /settings:
+    get:
+      summary: Get user reading settings
+      operationId: getSettings
+      responses:
+        '200':
+          description: User settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingSettings'
+    
+    put:
+      summary: Update user reading settings
+      operationId: updateSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadingSettings'
+      responses:
+        '200':
+          description: Updated settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingSettings'
+
+components:
+  schemas:
+    # Based on frontend/types.ts
+    
+    QuizQuestion:
+      type: object
+      required:
+        - question
+        - options
+        - correctIndex
+      properties:
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        correctIndex:
+          type: integer
+
+    SessionStats:
+      type: object
+      properties:
+        correctAnswers:
+          type: integer
+        totalQuestions:
+          type: integer
+        startTime:
+          type: integer
+          description: Unix timestamp
+        wordCount:
+          type: integer
+        endTime:
+          type: integer
+          description: Unix timestamp
+        date:
+          type: string
+        title:
+          type: string
+
+    Chunk:
+      type: object
+      required:
+        - text
+        - id
+      properties:
+        text:
+          type: string
+        formattedText:
+          type: string
+          description: Cache for AI-formatted markdown
+        id:
+          type: integer
+          description: The chunk index or ID (frontend uses simple number/chunks list, types.ts says number)
+
+    LibraryItem:
+      type: object
+      required:
+        - id
+        - title
+        - chunks
+        - currentIndex
+        - stats
+        - elapsedTime
+        - lastRead
+        - isComplete
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        chunks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Chunk'
+        currentIndex:
+          type: integer
+        stats:
+          $ref: '#/components/schemas/SessionStats'
+        elapsedTime:
+          type: integer
+          description: Seconds elapsed
+        lastRead:
+          type: integer
+          description: Unix timestamp
+        isComplete:
+          type: boolean
+
+    ReadingSettings:
+      type: object
+      properties:
+        theme:
+          type: string
+          enum: [light, sepia, dark]
+        fontSize:
+          type: string
+          enum: [sm, md, lg, xl]
+        alignment:
+          type: string
+          enum: [left, justify]
+        lineHeight:
+          type: string
+          enum: [normal, relaxed, loose]
+        width:
+          type: string
+          enum: [narrow, standard, wide]
+
+    ChatMessage:
+      type: object
+      required:
+        - id
+        - role
+        - text
+        - timestamp
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [user, model]
+        text:
+          type: string
+        timestamp:
+          type: integer
