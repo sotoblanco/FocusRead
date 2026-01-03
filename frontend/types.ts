@@ -21,6 +21,7 @@ export interface Chunk {
   text: string;
   formattedText?: string; // Cache for AI-formatted markdown
   id: number;
+  isProcessed?: boolean;
 }
 
 export interface Chapter {
@@ -33,6 +34,7 @@ export interface LibraryItem {
   id: string;
   title: string;
   chunks: Chunk[];
+  chapters?: Chapter[];
   currentIndex: number;
   stats: SessionStats;
   elapsedTime: number;

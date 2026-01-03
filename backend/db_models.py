@@ -20,6 +20,7 @@ class DBLibraryItem(Base):
     title = Column(String)
     # Store complex nested objects as JSON
     chunks = Column(JSON)
+    chapters = Column(JSON, default=[])
     current_index = Column(Integer)
     stats = Column(JSON)
     elapsed_time = Column(Integer)

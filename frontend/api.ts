@@ -112,9 +112,41 @@ class ApiClient {
     }
 
     async updateSettings(settings: ReadingSettings): Promise<ReadingSettings> {
-        return this.request<ReadingSettings>('/settings', {
+        return this.request('/settings', {
             method: 'PUT',
             body: JSON.stringify(settings),
+        });
+    }
+
+    async uploadPdf(file: File): Promise<LibraryItem> {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // request method handles JSON headers automatically, but for FormData we need to let browser set Content-Type
+        // So we override request slightly or use specific fetch here?
+        // Let's modify request or add a specialized request.
+        // Actually, my request wrapper sets 'Content-Type': 'application/json'. I should override that.
+
+        const response = await fetch(`${API_BASE}/upload/pdf`, {
+            method: 'POST',
+            body: formData,
+            credentials: 'include',
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+            throw new Error(error.detail || 'Upload failed');
+        }
+        return response.json();
+    }
+    async processStoryBatch(id: string, startIndex?: number, batchSize?: number): Promise<LibraryItem> {
+        const params = new URLSearchParams();
+        if (startIndex !== undefined) params.append('start_index', startIndex.toString());
+        if (batchSize !== undefined) params.append('batch_size', batchSize.toString());
+
+        const query = params.toString();
+        return this.request(`/stories/${id}/process${query ? `?${query}` : ''}`, {
+            method: 'POST',
         });
     }
 }

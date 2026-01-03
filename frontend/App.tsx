@@ -8,6 +8,8 @@ import { generateQuizForChunk, formatChunkToMarkdown, sendChatMessage } from './
 import { api } from './api';
 import { AuthModal } from './components/AuthModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
+import { PageSelector } from './components/PageSelector';
+import { TableOfContents } from './components/TableOfContents';
 import { AppView, Chunk, SessionStats, QuizQuestion, Chapter, LibraryItem, ReadingSettings, ChatMessage, User } from './types';
 
 const App: React.FC = () => {
@@ -19,6 +21,8 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showPageSelector, setShowPageSelector] = useState(false);
+  const [showTOC, setShowTOC] = useState(false);
 
   // Page selection state
   const [totalPages, setTotalPages] = useState(0);
@@ -375,9 +379,71 @@ const App: React.FC = () => {
 
   }, [chunks, currentIndex]);
 
+  // Batch processing state
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+
   useEffect(() => {
     if (view === 'reading') { fetchContent(); }
   }, [currentIndex, view, fetchContent]);
+
+  // Lazy Loading Effect
+  useEffect(() => {
+    if (view === 'reading' && activeSessionId && chunks.length > 0 && !isBatchProcessing) {
+      // Look ahead 2 chunks
+      const lookahead = 2;
+      const targetIndex = currentIndex + lookahead;
+
+      // If we are close to an unprocessed chunk (or if current is unprocessed)
+      const needsProcessing = (chunks[currentIndex] && chunks[currentIndex].isProcessed === false) ||
+        (chunks[targetIndex] && chunks[targetIndex].isProcessed === false);
+
+
+      if (needsProcessing) {
+        setIsBatchProcessing(true);
+        console.log("Triggering batch processing...");
+        // Critical: If current index is not processed, we must tell backend to start THERE.
+        // If current is processed but lookahead isn't, standard lazy load is fine (backend default finds next).
+        // Optimization: If jumping to unprocessed page, load ONLY THAT PAGE (batchSize=1) for speed.
+        let startIndexToRequest: number | undefined = undefined;
+        let batchSizeToRequest: number | undefined = undefined;
+
+        if (chunks[currentIndex] && !chunks[currentIndex].isProcessed) {
+          startIndexToRequest = currentIndex;
+          batchSizeToRequest = 1; // FAST MODE
+        }
+
+        api.processStoryBatch(activeSessionId, startIndexToRequest, batchSizeToRequest).then(updatedStory => {
+          // Update local chunks
+          setChunks(updatedStory.chunks);
+          // Update library cache
+          setLibrary(prev => prev.map(item => item.id === activeSessionId ? updatedStory : item));
+        }).catch(e => console.error("Batch process failed", e))
+          .finally(() => {
+            setIsBatchProcessing(false);
+          });
+      }
+    }
+  }, [currentIndex, view, activeSessionId, chunks, isBatchProcessing]);
+
+  const handlePrevious = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+      setShowQuiz(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleNext = () => {
+    if (currentIndex < chunks.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+      setShowQuiz(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleJumpToPage = () => {
+    setShowPageSelector(true);
+  };
 
   const handleAnswer = (correct: boolean) => {
     setStats(prev => ({
@@ -467,8 +533,33 @@ const App: React.FC = () => {
   const getBtnClass = (isActive: boolean) =>
     `${btnBase} ${isActive ? btnActive : settings.theme === 'dark' ? darkBtnInactive : btnInactive}`;
 
+  const activeStory = library.find(i => i.id === activeSessionId);
+  const chapters = activeStory?.chapters || [];
+
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-500 ${getThemeClass()}`}>
+      <PageSelector
+        isOpen={showPageSelector}
+        onClose={() => setShowPageSelector(false)}
+        totalPages={chunks.length}
+        currentPage={currentIndex + 1}
+        onSelectPage={(page) => {
+          setCurrentIndex(page - 1);
+          setShowQuiz(false);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
+      <TableOfContents
+        isOpen={showTOC}
+        onClose={() => setShowTOC(false)}
+        chapters={chapters}
+        currentChunkIndex={currentIndex}
+        onSelectChapter={(page) => {
+          setCurrentIndex(page);
+          setShowQuiz(false);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
       {/* Navigation Header */}
       {view !== 'upload' && view !== 'chapter-select' && view !== 'page-selection' && (
         <header className={`sticky top-0 z-20 backdrop-blur-md border-b px-6 py-4 flex items-center justify-between ${settings.theme === 'dark' ? 'bg-black/40 border-white/5' : 'bg-white/40 border-gray-100'}`}>
@@ -481,7 +572,19 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-4 text-xs font-bold tracking-widest uppercase opacity-40">
+            <button
+              onClick={() => setShowTOC(true)}
+              className="p-2 rounded-full hover:bg-black/5 transition-colors text-gray-400 hover:text-indigo-500"
+              title="Table of Contents"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" /></svg>
+            </button>
+
+            <div
+              onClick={handleJumpToPage}
+              className="flex items-center space-x-4 text-xs font-bold tracking-widest uppercase opacity-40 hover:opacity-100 cursor-pointer transition-opacity"
+              title="Jump to section"
+            >
               <span>Section {currentIndex + 1} of {chunks.length}</span>
               <span className="hidden sm:inline">{formatTime(elapsedTime)}</span>
             </div>
@@ -601,6 +704,10 @@ const App: React.FC = () => {
               onProcessed={processText}
               onChaptersFound={handleChaptersFound}
               onPdfLoaded={handlePdfLoaded}
+              onStoryCreated={(story) => {
+                setLibrary(prev => [story, ...prev]);
+                startSession(story);
+              }}
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-12 pt-12 border-t border-gray-100 animate-fade-in">
@@ -768,21 +875,56 @@ const App: React.FC = () => {
                     // While waiting for first enhancement, show raw text with shimmer or just raw text
                     <p className="whitespace-pre-wrap">{chunks[currentIndex]?.text}</p>
                   ) : (
-                    <ReactMarkdown>{displayContent}</ReactMarkdown>
+                    chunks[currentIndex]?.isProcessed === false ? (
+                      <div className="flex flex-col items-center justify-center py-20 space-y-4 animate-pulse">
+                        <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                        <p className="text-gray-400 font-medium">Generating content from PDF...</p>
+                      </div>
+                    ) : (
+                      <ReactMarkdown>{displayContent}</ReactMarkdown>
+                    )
                   )}
                 </div>
               </div>
 
-              <div className="flex flex-col items-center space-y-8 pt-16 mt-8 border-t border-black/5">
-                {!showQuiz ? (
+              <div className="flex flex-col items-center space-y-6 pt-12 mt-8 border-t border-black/5 w-full">
+
+                {/* Navigation Controls */}
+                <div className="flex items-center justify-between w-full max-w-sm">
                   <button
-                    onClick={() => setShowQuiz(true)}
-                    className="group bg-indigo-600 text-white px-10 py-4 rounded-full font-bold shadow-xl shadow-indigo-100 hover:bg-indigo-700 hover:scale-105 transition-all"
+                    onClick={handlePrevious}
+                    disabled={currentIndex === 0}
+                    className={`p-4 rounded-full transition-all ${currentIndex === 0 ? 'opacity-20 cursor-not-allowed' : 'hover:bg-black/5 text-indigo-600'}`}
+                    title="Previous Section"
                   >
-                    See next paragraph
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                   </button>
-                ) : (
-                  <QuizCard quiz={currentQuiz!} onAnswer={handleAnswer} isLoading={isQuizLoading} />
+
+                  {!showQuiz ? (
+                    <button
+                      onClick={() => setShowQuiz(true)}
+                      className="group bg-indigo-600 text-white px-8 py-3 rounded-full font-bold shadow-xl shadow-indigo-100 hover:bg-indigo-700 hover:scale-105 transition-all"
+                    >
+                      Test Understanding
+                    </button>
+                  ) : (
+                    <span className="text-xs font-bold uppercase tracking-widest opacity-40">Quiz Active</span>
+                  )}
+
+                  <button
+                    onClick={handleNext}
+                    disabled={currentIndex === chunks.length - 1}
+                    className={`p-4 rounded-full transition-all ${currentIndex === chunks.length - 1 ? 'opacity-20 cursor-not-allowed' : 'hover:bg-black/5 text-indigo-600'}`}
+                    title="Next Section"
+                  >
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  </button>
+                </div>
+
+                {showQuiz && (
+                  <div className="w-full max-w-2xl animate-fade-in">
+                    <QuizCard quiz={currentQuiz!} onAnswer={handleAnswer} isLoading={isQuizLoading} />
+                  </div>
                 )}
               </div>
             </div>

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import ai, stories, settings, auth, leaderboard
+from routers import ai, stories, settings, auth, leaderboard, upload
 
 from contextlib import asynccontextmanager
 from database import db
@@ -37,4 +37,5 @@ app.include_router(ai.router)
 app.include_router(stories.router)
 app.include_router(settings.router)
 app.include_router(leaderboard.router)
+app.include_router(upload.router)
 

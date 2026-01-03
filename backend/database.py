@@ -21,6 +21,25 @@ class Database:
     async def init_db(self):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+        await self._migrate_db()
+
+    async def _migrate_db(self):
+        # Simple migration system for SQLite
+        from sqlalchemy import text
+        async with engine.begin() as conn:
+            try:
+                # Check for chapters column in library_items
+                result = await conn.execute(text("PRAGMA table_info(library_items)"))
+                columns = [row[1] for row in result.fetchall()]
+                
+                if "library_items" in columns: # Wait, logic error. table name? No, PRAGMA returns columns of the table.
+                     pass 
+
+                if columns and "chapters" not in columns:
+                    print("Migrating: Adding 'chapters' column to library_items")
+                    await conn.execute(text("ALTER TABLE library_items ADD COLUMN chapters JSON DEFAULT '[]'"))
+            except Exception as e:
+                print(f"Migration error (ignored): {e}")
 
     async def get_stories(self, user_id: str) -> List[LibraryItem]:
         async with AsyncSessionLocal() as session:
@@ -35,6 +54,7 @@ class Database:
                 user_id=user_id,
                 title=story.title,
                 chunks=[c.model_dump() for c in story.chunks],
+                chapters=[c.model_dump() for c in story.chapters],
                 current_index=story.currentIndex,
                 stats=story.stats.model_dump(),
                 elapsed_time=story.elapsedTime,
@@ -62,6 +82,7 @@ class Database:
             ).values(
                 title=story.title,
                 chunks=[c.model_dump() for c in story.chunks],
+                chapters=[c.model_dump() for c in story.chapters],
                 current_index=story.currentIndex,
                 stats=story.stats.model_dump(),
                 elapsed_time=story.elapsedTime,
@@ -126,14 +147,16 @@ class Database:
             return settings
 
     def _to_pydantic_library_item(self, db_item: DBLibraryItem) -> LibraryItem:
-        from models import Chunk, SessionStats
+        from models import Chunk, SessionStats, Chapter
         chunks = [Chunk(**c) for c in db_item.chunks] if db_item.chunks else []
+        chapters = [Chapter(**c) for c in db_item.chapters] if db_item.chapters else []
         stats = SessionStats(**db_item.stats) if db_item.stats else SessionStats(correctAnswers=0, totalQuestions=0, startTime=0, wordCount=0)
         
         return LibraryItem(
             id=db_item.id,
             title=db_item.title,
             chunks=chunks,
+            chapters=chapters,
             currentIndex=db_item.current_index,
             stats=stats,
             elapsedTime=db_item.elapsed_time,

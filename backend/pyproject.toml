@@ -14,6 +14,12 @@ dependencies = [
     "asyncpg>=0.31.0",
     "passlib[bcrypt]>=1.7.4",
     "pyjwt>=2.10.1",
+    "pypdf>=6.5.0",
+    "fpdf>=1.7.2",
+    "requests>=2.32.5",
+    "google-genai>=1.56.0",
+    "httpx>=0.28.1",
+    "pdf2image>=1.17.0",
 ]
 
 [dev-dependencies]

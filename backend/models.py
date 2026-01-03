@@ -21,11 +21,17 @@ class Chunk(BaseModel):
     text: str
     formattedText: Optional[str] = None
     id: int
+    isProcessed: bool = True
+
+class Chapter(BaseModel):
+    title: str
+    pageIndex: int
 
 class LibraryItem(BaseModel):
     id: str
     title: str
     chunks: List[Chunk]
+    chapters: List[Chapter] = []
     currentIndex: int
     stats: SessionStats
     elapsedTime: int

@@ -7,6 +7,7 @@ import os
 # Define the image
 image = (
     modal.Image.debian_slim(python_version="3.10")
+    .apt_install("poppler-utils")
     .pip_install(
         "fastapi",
         "uvicorn",
@@ -15,9 +16,10 @@ image = (
         "aiosqlite",
         "pyjwt",
         "passlib[bcrypt]",
-        "passlib[bcrypt]",
         "python-multipart",
-        "google-genai" 
+        "google-genai",
+        "pdf2image",
+        "pypdf"
     )
     .env({"ENVIRONMENT": "production"})
     .add_local_dir("backend", remote_path="/root/backend")
@@ -44,6 +46,12 @@ def fastapi_app():
 
     # Mount frontend static assets
     api_app.mount("/assets", StaticFiles(directory="/root/frontend_dist/assets"), name="assets")
+    
+    # Mount uploads directory from Volume
+    # Ensure directory exists
+    if not os.path.exists("/data/uploads"):
+        os.makedirs("/data/uploads", exist_ok=True)
+    api_app.mount("/uploads", StaticFiles(directory="/data/uploads"), name="uploads")
     
     @api_app.get("/")
     async def read_index():

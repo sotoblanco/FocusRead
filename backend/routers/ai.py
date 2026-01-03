@@ -9,17 +9,9 @@ from models import (
     ChatRequest, ChatResponse
 )
 
+from ai_client import client, MODEL_NAME
+
 router = APIRouter(prefix="/ai", tags=["AI"])
-
-# Initialize Client
-api_key = os.getenv("GEMINI_API_KEY")
-client = None
-if api_key:
-    client = genai.Client(api_key=api_key)
-else:
-    print("Warning: GEMINI_API_KEY not set")
-
-MODEL_NAME = "gemini-2.5-flash"
 
 def extract_json(text: str) -> dict:
     """Helper to extract JSON from response text"""

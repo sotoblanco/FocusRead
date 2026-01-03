@@ -1,14 +1,16 @@
-
 import React, { useState, useRef } from 'react';
 import { Chapter } from '../types';
+import { api } from '../api';
+import { LibraryItem } from '../types';
 
 interface FileUploadProps {
   onProcessed: (text: string, title?: string) => void;
   onChaptersFound: (chapters: Chapter[], pdfDoc: any, totalPages: number) => void;
   onPdfLoaded: (pdfDoc: any, totalPages: number) => void;
+  onStoryCreated: (story: LibraryItem) => void;
 }
 
-export const FileUpload: React.FC<FileUploadProps> = ({ onProcessed, onChaptersFound, onPdfLoaded }) => {
+export const FileUpload: React.FC<FileUploadProps> = ({ onProcessed, onChaptersFound, onPdfLoaded, onStoryCreated }) => {
   const [text, setText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -19,18 +21,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onProcessed, onChaptersF
     }
   };
 
-  const resolveOutlinePage = async (pdf: any, dest: any) => {
-    if (typeof dest === 'string') {
-      const destArray = await pdf.getDestination(dest);
-      if (destArray && destArray[0]) {
-        return await pdf.getPageIndex(destArray[0]);
-      }
-    } else if (Array.isArray(dest) && dest[0]) {
-      return await pdf.getPageIndex(dest[0]);
-    }
-    return -1;
-  };
-
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -38,45 +28,15 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onProcessed, onChaptersF
     setIsProcessing(true);
     try {
       if (file.type === 'application/pdf') {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          try {
-            const typedarray = new Uint8Array(e.target?.result as ArrayBuffer);
-            const pdfjsLib = (window as any).pdfjsLib;
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-            const pdf = await pdfjsLib.getDocument(typedarray).promise;
-            
-            const totalPages = pdf.numPages;
-            const outline = await pdf.getOutline();
-            
-            if (outline && outline.length > 0) {
-              const chapters: Chapter[] = [];
-              for (const item of outline) {
-                if (item.dest) {
-                  const pageIndex = await resolveOutlinePage(pdf, item.dest);
-                  if (pageIndex !== -1) {
-                    chapters.push({ title: item.title, pageIndex });
-                  }
-                }
-              }
-              
-              if (chapters.length > 1) {
-                onChaptersFound(chapters, pdf, totalPages);
-                setIsProcessing(false);
-                return;
-              }
-            }
-
-            // If no outline, ask for pages or process first 100
-            onPdfLoaded(pdf, totalPages);
-          } catch (err) {
-            console.error("PDF Error:", err);
-            alert("Failed to read PDF structure.");
-          } finally {
-            setIsProcessing(false);
-          }
-        };
-        reader.readAsArrayBuffer(file);
+        try {
+          const story = await api.uploadPdf(file);
+          onStoryCreated(story);
+        } catch (err) {
+          console.error(err);
+          alert("Failed to upload/process PDF.");
+        } finally {
+          setIsProcessing(false);
+        }
       } else {
         const reader = new FileReader();
         reader.onload = (e) => {
